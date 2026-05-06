@@ -1,0 +1,55 @@
+version = project.mod_version
+group = project.maven_group
+
+def javaVersion = (project.findProperty('java_version') ?: '21') as int
+def mappingsType = (project.findProperty('mappings_type') ?: 'auto').toString()
+
+base {
+    archivesName = project.archives_base_name
+}
+
+def usesIntermediarySource = fileTree("${project.projectDir}/src/main/java").matching {
+    include '**/*.java'
+}.any { sourceFile ->
+    sourceFile.text.contains('import net.minecraft.class_')
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    if (mappingsType == 'official') {
+        mappings loom.officialMojangMappings()
+    } else if (mappingsType == 'intermediary') {
+        mappings "net.fabricmc:intermediary:${project.minecraft_version}:v2"
+    } else {
+        mappings usesIntermediarySource
+                ? "net.fabricmc:intermediary:${project.minecraft_version}:v2"
+                : "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    }
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = javaVersion
+}
+
+java {
+    withSourcesJar()
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(javaVersion)
+    }
+    sourceCompatibility = JavaVersion.toVersion(javaVersion)
+    targetCompatibility = JavaVersion.toVersion(javaVersion)
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
